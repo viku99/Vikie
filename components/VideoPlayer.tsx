@@ -39,6 +39,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
   const isReadyRef = useRef(false);
+  const isMountedRef = useRef(true);
   
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
@@ -53,6 +54,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // ============================================================================
   
   useEffect(() => {
+    isMountedRef.current = true;
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
     };
@@ -61,6 +63,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
     
     return () => {
+      isMountedRef.current = false;
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
       document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
     };
@@ -101,6 +104,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // ============================================================================
 
   const onPlayerReady = useCallback((event: any) => {
+    if (!isMountedRef.current) return;
     isReadyRef.current = true;
     setIsReady(true);
     
@@ -112,6 +116,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [activeVideoId, playerId]);
 
   const onPlayerStateChange = useCallback((event: any) => {
+    if (!isMountedRef.current) return;
     if (event.data === 1) setIsPlaying(true);
     else if (event.data === 2) setIsPlaying(false);
     else if (event.data === 0) {
@@ -121,7 +126,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, []);
 
   const initYT = useCallback(() => {
-    if (!window.YT || !window.YT.Player || playerRef.current) return;
+    if (!isMountedRef.current || !window.YT || !window.YT.Player || playerRef.current) return;
     
     playerRef.current = new window.YT.Player(playerId, {
       width: '100%',
@@ -134,7 +139,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         modestbranding: 1,
         playsinline: 1,
         iv_load_policy: 3,
-        fs: 0, // Disable native YouTube fullscreen button
+        fs: 0, 
         disablekb: 1,
         mute: 1, 
         loop: 1,
@@ -160,8 +165,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (!window._ytInitializers) {
         window._ytInitializers = [];
         window.onYouTubeIframeAPIReady = () => {
-          window._ytInitializers?.forEach(cb => cb());
-          delete window._ytInitializers;
+          if (window._ytInitializers) {
+            window._ytInitializers.forEach(cb => cb());
+            delete window._ytInitializers;
+          }
         };
         const tag = document.createElement('script');
         tag.src = "https://www.youtube.com/iframe_api";
@@ -177,6 +184,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         playerRef.current.destroy();
         playerRef.current = null;
         isReadyRef.current = false;
+      }
+      // Remove self from initializers if unmounted before script load
+      if (window._ytInitializers) {
+        window._ytInitializers = window._ytInitializers.filter(cb => cb !== initYT);
       }
     };
   }, [type, initYT]);
@@ -204,7 +215,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       setShowStatusIcon('play');
     }
     
-    setTimeout(() => setShowStatusIcon(null), 800);
+    setTimeout(() => {
+        if (isMountedRef.current) setShowStatusIcon(null);
+    }, 800);
   };
 
   const toggleMute = (e: React.MouseEvent | React.TouchEvent) => {
@@ -225,7 +238,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
     
     setShowStatusIcon(nextMute ? 'mute' : 'unmute');
-    setTimeout(() => setShowStatusIcon(null), 800);
+    setTimeout(() => {
+        if (isMountedRef.current) setShowStatusIcon(null);
+    }, 800);
   };
 
   const toggleFullscreen = (e: React.MouseEvent | React.TouchEvent) => {
@@ -267,8 +282,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           src={src} 
           muted={isMuted} 
           loop 
+          // Removed non-standard webkitPlaysInline property to fix TypeScript error
           playsInline 
-          webkit-playsinline="true"
           autoPlay={autoplay}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}

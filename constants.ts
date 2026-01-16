@@ -16,7 +16,13 @@ export const SITE_INFO = {
   name: "VIKAS",
   role: "Motion-First Visual Storyteller",
   tagline: "Designing attention through movement.",
-  showreelId: "CPnMek8iU1U"
+  showreelId: "CPnMek8iU1U",
+  description: "Portfolio of Vikas Bala, specializing in cinematic motion graphics, rhythmic video editing, and brand storytelling."
+};
+
+export const TECH_CATEGORIES = {
+  'Motion Engineering': ["After Effects", "Premiere Pro", "Time Remapping", "Graph Editor"],
+  'Advanced Techniques': ["AI Narrative Synthesis", "Sound Engineering", "Beat-Accuracy", "Expression-based Animation"]
 };
 
 

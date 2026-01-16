@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, Variants, AnimatePresence } from 'framer-motion';
 import { Search, ChevronDown, X, Loader2 } from 'lucide-react';
-import { PROJECTS } from '../constants';
+import { PROJECTS, TECH_CATEGORIES } from '../constants';
 import ProjectCard from '../components/ProjectCard';
 
 const containerVariants: Variants = {
@@ -51,11 +51,6 @@ const Portfolio = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  const techCategories = {
-    'Motion Engineering': ["After Effects", "Premiere Pro", "Time Remapping"],
-    'Advanced Techniques': ["AI Narrative Synthesis", "Sound Engineering", "Beat-Accuracy"]
-  };
 
   const handleTechChange = (tech: string) => {
     setSelectedTech(prev => (prev === tech ? null : tech));
@@ -148,7 +143,7 @@ const Portfolio = () => {
                           >
                             Show All Work
                           </li>
-                          {Object.entries(techCategories).map(([category, techs]) => (
+                          {Object.entries(TECH_CATEGORIES).map(([category, techs]) => (
                             <React.Fragment key={category}>
                                 <li className="px-5 py-2 text-[8px] md:text-[9px] uppercase tracking-widest text-neutral-600 font-black bg-white/2">{category}</li>
                                 {techs.map(tech => (

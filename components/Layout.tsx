@@ -17,9 +17,12 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
       {/* Global custom cursor implementation */}
       <CustomCursor />
       
-      {/* Enhanced Grain Overlay - Using global tailwind config from index.html */}
-      <div className="fixed inset-0 pointer-events-none z-[100] opacity-[0.03] overflow-hidden">
-        <div className="absolute inset-[-200%] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] animate-grain" />
+      {/* Optimized Grain Overlay */}
+      <div className="fixed inset-0 pointer-events-none z-[100] opacity-[0.03] overflow-hidden translate-z-0">
+        <div 
+          className="absolute inset-[-200%] bg-[url('https://grainy-gradients.vercel.app/noise.svg')] animate-grain will-change-transform" 
+          style={{ transform: 'translate3d(0,0,0)' }}
+        />
       </div>
 
       <AnimatePresence mode="wait">

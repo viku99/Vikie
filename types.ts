@@ -7,11 +7,11 @@ export interface Project {
   imageUrl: string;
   isSeries?: boolean; // Flag to identify multi-video collections
   cardPreviewVideo: {
-    type: 'local' | 'youtube';
+    type: 'local' | 'youtube' | 'video';
     src: string;
   };
   heroVideo: {
-    type: 'local' | 'youtube';
+    type: 'local' | 'youtube' | 'video';
     src: string;
   };
   details: {

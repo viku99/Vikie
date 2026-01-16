@@ -19,7 +19,6 @@ const Home = () => {
   const smoothY = useSpring(mouseY, springConfig);
   
   useEffect(() => {
-    // Initialize dimensions only on mount
     setWindowSize({ width: window.innerWidth, height: window.innerHeight });
 
     const handleResize = () => {
@@ -35,7 +34,8 @@ const Home = () => {
     window.addEventListener('mousemove', handleMouseMove);
     
     const handleScroll = (event: WheelEvent) => {
-      if (event.deltaY > 0 && !navigatedRef.current) {
+      // Increased threshold to 200 to ensure scroll is intentional
+      if (event.deltaY > 200 && !navigatedRef.current) {
         navigatedRef.current = true;
         navigate('/portfolio');
       }
@@ -50,7 +50,8 @@ const Home = () => {
       if (navigatedRef.current) return;
       const currentY = event.touches[0].clientY;
       const deltaY = currentY - touchStartY.current;
-      if (deltaY < -40) { 
+      // High threshold for mobile to avoid accidental swipes
+      if (deltaY < -150) { 
         navigatedRef.current = true;
         navigate('/portfolio');
       }
@@ -141,14 +142,14 @@ const Home = () => {
         transition={{ duration: 1, delay: 2.2 }}
         className="absolute bottom-20 md:bottom-12"
       >
-        <Link to="/portfolio" aria-label="Scroll to portfolio">
+        <Link to="/portfolio" aria-label="Explore portfolio">
             <motion.div
               animate={{ y: [0, 8, 0] }}
               transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
-              className="flex flex-col items-center gap-3"
+              className="flex flex-col items-center gap-3 group"
             >
-              <span className="text-[8px] md:text-[9px] uppercase tracking-[0.6em] md:tracking-[0.8em] text-neutral-600 font-mono">Scroll to explore</span>
-              <ChevronDown className="w-5 h-5 text-neutral-800" />
+              <span className="text-[8px] md:text-[9px] uppercase tracking-[0.6em] md:tracking-[0.8em] text-neutral-600 font-mono group-hover:text-accent transition-colors">Scroll to explore</span>
+              <ChevronDown className="w-5 h-5 text-neutral-800 group-hover:text-accent transition-colors" />
             </motion.div>
         </Link>
       </motion.div>
