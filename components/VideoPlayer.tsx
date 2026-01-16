@@ -38,6 +38,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const { activeVideoId, setActiveVideoId } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   
   const [isInView, setIsInView] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -48,9 +49,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   
   const playerId = useRef(`player-${Math.random().toString(36).substr(2, 9)}`).current;
   const isMounted = useRef(true);
+  const ytInitialized = useRef(false);
 
   // ============================================================================
-  // INTERSECTION OBSERVER
+  // INTERSECTION OBSERVER - Robust Tracking
   // ============================================================================
   useEffect(() => {
     isMounted.current = true;
@@ -60,7 +62,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           setIsInView(entry.isIntersecting);
         }
       },
-      { threshold: 0.1 }
+      { threshold: 0.05, rootMargin: '200px' } // Pre-load slightly before coming into view
     );
 
     if (containerRef.current) observer.observe(containerRef.current);
@@ -71,69 +73,33 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, []);
 
   // ============================================================================
-  // COORDINATION & AUTOPLAY LOGIC
-  // ============================================================================
-  useEffect(() => {
-    if (!isReady || !playerRef.current || !isInView) return;
-
-    // A video should play if it's explicitly active OR if it's the only one in view with autoplay
-    const isActive = activeVideoId === playerId || (activeVideoId === null && autoplay);
-
-    try {
-      if (type === 'youtube') {
-        if (isActive) {
-          if (activeVideoId === playerId) {
-            playerRef.current.unMute?.();
-            setIsMuted(false);
-          } else {
-            playerRef.current.mute?.();
-            setIsMuted(true);
-          }
-          playerRef.current.playVideo?.();
-        } else {
-          playerRef.current.pauseVideo?.();
-        }
-      } else {
-        const video = playerRef.current as HTMLVideoElement;
-        if (isActive) {
-          video.muted = activeVideoId !== playerId;
-          setIsMuted(video.muted);
-          video.play().catch(() => {});
-        } else {
-          video.pause();
-        }
-      }
-    } catch (err) {
-      console.warn("Video coordination error:", err);
-    }
-  }, [activeVideoId, playerId, type, isReady, isInView, autoplay]);
-
-  // ============================================================================
-  // YOUTUBE ENGINE
+  // YOUTUBE API HANDLING
   // ============================================================================
   const onPlayerReady = useCallback((event: any) => {
     if (!isMounted.current) return;
     setIsReady(true);
     
-    // Immediate action on ready to prevent black screen
-    if (autoplay || activeVideoId === playerId) {
+    // Check if we should start immediately
+    const isActive = activeVideoId === playerId || (activeVideoId === null && autoplay);
+    if (isActive) {
       event.target.playVideo();
     }
   }, [activeVideoId, playerId, autoplay]);
 
   const onPlayerStateChange = useCallback((event: any) => {
     if (!isMounted.current) return;
-    if (event.data === 1) setIsPlaying(true);
-    else if (event.data === 2) setIsPlaying(false);
-    else if (event.data === 0) {
+    if (event.data === window.YT.PlayerState.PLAYING) setIsPlaying(true);
+    else if (event.data === window.YT.PlayerState.PAUSED) setIsPlaying(false);
+    else if (event.data === window.YT.PlayerState.ENDED) {
       event.target.seekTo(0);
       event.target.playVideo();
     }
   }, []);
 
   const initYT = useCallback(() => {
-    if (!isMounted.current || !window.YT || !window.YT.Player || playerRef.current || !isInView) return;
+    if (!isMounted.current || !window.YT || !window.YT.Player || ytInitialized.current || !isInView) return;
     
+    ytInitialized.current = true;
     playerRef.current = new window.YT.Player(playerId, {
       width: '100%',
       height: '100%',
@@ -147,7 +113,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         iv_load_policy: 3,
         fs: 0, 
         disablekb: 1,
-        mute: 1, 
+        mute: 1, // Start muted for autoplay compliance
         loop: 1,
         playlist: src,
         enablejsapi: 1,
@@ -161,12 +127,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [src, autoplay, playerId, onPlayerReady, onPlayerStateChange, isInView]);
 
   useEffect(() => {
-    if (type !== 'youtube') {
-      if (isInView) setIsReady(true);
-      return;
-    }
+    if (type !== 'youtube') return;
 
-    if (isInView) {
+    if (isInView && !ytInitialized.current) {
       if (!window.YT || !window.YT.Player) {
         if (!window._ytInitializers) {
           window._ytInitializers = [];
@@ -185,17 +148,54 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         initYT();
       }
     }
-
-    return () => {
-      if (playerRef.current?.destroy) {
-        playerRef.current.destroy();
-        playerRef.current = null;
-      }
-    };
   }, [type, initYT, isInView]);
 
   // ============================================================================
-  // HANDLERS
+  // LOCAL VIDEO HANDLING
+  // ============================================================================
+  useEffect(() => {
+    if (type === 'youtube') return;
+    if (videoRef.current) setIsReady(true);
+  }, [type]);
+
+  // ============================================================================
+  // COORDINATION LOGIC - The heartbeat of playback
+  // ============================================================================
+  useEffect(() => {
+    if (!isReady || !isInView) return;
+
+    const isActive = activeVideoId === playerId || (activeVideoId === null && autoplay);
+
+    try {
+      if (type === 'youtube' && playerRef.current) {
+        if (isActive) {
+          if (activeVideoId === playerId) {
+            playerRef.current.unMute?.();
+            setIsMuted(false);
+          } else {
+            playerRef.current.mute?.();
+            setIsMuted(true);
+          }
+          playerRef.current.playVideo?.();
+        } else {
+          playerRef.current.pauseVideo?.();
+        }
+      } else if (videoRef.current) {
+        if (isActive) {
+          videoRef.current.muted = activeVideoId !== playerId;
+          setIsMuted(videoRef.current.muted);
+          videoRef.current.play().catch(() => {});
+        } else {
+          videoRef.current.pause();
+        }
+      }
+    } catch (err) {
+      console.warn("Playback Sync error:", err);
+    }
+  }, [activeVideoId, playerId, type, isReady, isInView, autoplay]);
+
+  // ============================================================================
+  // INTERACTION HANDLERS
   // ============================================================================
   const handleInteraction = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
@@ -204,11 +204,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (activeVideoId === playerId) {
       if (isPlaying) {
         if (type === 'youtube') playerRef.current?.pauseVideo();
-        else playerRef.current?.pause();
+        else videoRef.current?.pause();
         setShowStatusIcon('pause');
       } else {
         if (type === 'youtube') playerRef.current?.playVideo();
-        else playerRef.current?.play().catch(() => {});
+        else videoRef.current?.play().catch(() => {});
         setShowStatusIcon('play');
       }
     } else {
@@ -234,8 +234,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         playerRef.current?.unMute();
         playerRef.current?.setVolume(100);
       }
-    } else if (playerRef.current) {
-      (playerRef.current as HTMLVideoElement).muted = nextMute;
+    } else if (videoRef.current) {
+      videoRef.current.muted = nextMute;
     }
     
     setShowStatusIcon(nextMute ? 'mute' : 'unmute');
@@ -266,41 +266,38 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden bg-primary/20 group/vid touch-action-manipulation antialiased ${className} ${isFullscreen ? 'z-[9999]' : ''}`}
+      className={`relative w-full h-full overflow-hidden bg-[#0a0a0a] group/vid touch-action-manipulation antialiased ${className} ${isFullscreen ? 'z-[9999]' : ''}`}
       onClick={handleInteraction}
       style={{ transform: 'translate3d(0,0,0)' }}
     >
-      {isInView ? (
-        <>
-          {type === 'youtube' ? (
-            <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-              <div className={`relative flex-shrink-0 ${isFullscreen ? 'w-full h-full' : 'w-[105%] h-[105%]'}`}>
-                <div id={playerId} className="w-full h-full" />
-              </div>
-            </div>
-          ) : (
-            <video 
-              ref={playerRef}
-              className="w-full h-full object-cover will-change-transform" 
-              src={src} 
-              muted={isMuted} 
-              loop 
-              playsInline 
-              autoPlay={autoplay}
-              onPlay={() => setIsPlaying(true)}
-              onPause={() => setIsPlaying(false)}
-            />
-          )}
-        </>
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 text-accent/10 animate-spin" strokeWidth={1} />
-        </div>
-      )}
+      {/* Background Poster placeholder */}
+      <div className="absolute inset-0 bg-[#0d0d0d] z-0" />
 
-      {!isReady && isInView && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
-          <Loader2 className="w-8 h-8 text-accent/20 animate-spin" strokeWidth={1} />
+      <div className={`w-full h-full transition-opacity duration-1000 ${isReady && isInView ? 'opacity-100' : 'opacity-0'}`}>
+        {type === 'youtube' ? (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
+            <div className={`relative flex-shrink-0 ${isFullscreen ? 'w-full h-full' : 'w-[105%] h-[105%]'}`}>
+              <div id={playerId} className="w-full h-full" />
+            </div>
+          </div>
+        ) : (
+          <video 
+            ref={videoRef}
+            className="w-full h-full object-cover will-change-transform" 
+            src={src} 
+            muted={isMuted} 
+            loop 
+            playsInline 
+            autoPlay={autoplay}
+            onPlay={() => setIsPlaying(true)}
+            onPause={() => setIsPlaying(false)}
+          />
+        )}
+      </div>
+
+      {(!isReady || !isInView) && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none">
+          <Loader2 className="w-8 h-8 text-white/10 animate-spin" strokeWidth={1} />
         </div>
       )}
 

@@ -54,7 +54,7 @@ const ProjectDetail = () => {
                   {project.gallery?.map((item, idx) => (
                     <motion.div key={idx} variants={fadeUp} className="relative aspect-video rounded-3xl overflow-hidden border border-white/5 bg-primary shadow-2xl">
                       <VideoPlayer 
-                        type={item.type as 'youtube' | 'local'} 
+                        type={item.type === 'youtube' ? 'youtube' : 'local'} 
                         src={item.src} 
                         autoplay={idx === 0} 
                       />
