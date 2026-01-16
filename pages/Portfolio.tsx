@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, Variants, AnimatePresence } from 'framer-motion';
-import { Search, ChevronDown, X, Loader2, Filter } from 'lucide-react';
+import { Search, ChevronDown, X, Loader2, Filter, Terminal } from 'lucide-react';
 import { PROJECTS } from '../constants';
 import ProjectCard from '../components/ProjectCard';
 
@@ -41,11 +41,15 @@ const Portfolio = () => {
   
   const sortRef = useRef<HTMLDivElement>(null);
 
-  // Dynamically extract unique technologies from current projects
-  const availableTechs = useMemo(() => {
-    const techs = new Set<string>();
-    PROJECTS.forEach(p => p.details.techStack.forEach(t => techs.add(t)));
-    return Array.from(techs).sort();
+  // Dynamically extract unique technologies and their counts
+  const techStats = useMemo(() => {
+    const counts: Record<string, number> = {};
+    PROJECTS.forEach(p => {
+      p.details.techStack.forEach(t => {
+        counts[t] = (counts[t] || 0) + 1;
+      });
+    });
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, []);
 
   useEffect(() => {
@@ -97,94 +101,118 @@ const Portfolio = () => {
           variants={containerVariants}
         >
           {/* Header Section */}
-          <div className="mb-12 md:mb-16">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-                <div className="space-y-2">
-                  <motion.span variants={itemVariants} className="text-[9px] uppercase tracking-[0.5em] text-neutral-600 font-mono block">
-                    Archive_Index // 2024-25
-                  </motion.span>
-                  <motion.h1 variants={itemVariants} className="text-5xl md:text-8xl font-black uppercase tracking-tighter leading-none">
-                      Selected <br className="hidden md:block" /> <span className="text-neutral-800">Artifacts</span>
+          <div className="mb-12 md:mb-16 border-b border-white/5 pb-12">
+              <div className="flex flex-col md:flex-row md:items-end justify-between gap-8">
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                    <motion.span variants={itemVariants} className="text-[9px] uppercase tracking-[0.5em] text-neutral-600 font-mono block">
+                      Archive_Index // v2.5
+                    </motion.span>
+                  </div>
+                  <motion.h1 variants={itemVariants} className="text-6xl md:text-[10vw] font-black uppercase tracking-tighter leading-[0.8]">
+                      Work <br className="hidden md:block" /> <span className="text-neutral-900">Archive</span>
                   </motion.h1>
                 </div>
                 
-                <motion.div variants={itemVariants} className="flex items-center gap-4 text-neutral-700 font-mono text-[10px] uppercase tracking-widest">
-                  <div className="h-[1px] w-8 bg-white/5" />
-                  <span>Showing {displayedProjects.length} of {PROJECTS.length}</span>
+                <motion.div variants={itemVariants} className="flex flex-col items-end gap-2 text-neutral-700 font-mono text-[10px] uppercase tracking-widest">
+                  <div className="flex items-center gap-3">
+                    <Terminal size={12} className="text-accent/20" />
+                    <span>System Status: Online</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="h-[1px] w-12 bg-white/5" />
+                    <span className="text-accent/60">{displayedProjects.length} Fragments Found</span>
+                  </div>
                 </motion.div>
               </div>
           </div>
 
-          {/* New Command Center Layout */}
-          <div className="mb-16 md:mb-24 space-y-8">
-            <div className="flex flex-col lg:flex-row gap-6 items-start lg:items-center">
-              
-              {/* Refined Search */}
-              <motion.div variants={itemVariants} className="relative w-full lg:max-w-md group">
-                <div className="absolute inset-y-0 left-5 flex items-center pointer-events-none">
-                  <Search className="w-4 h-4 text-neutral-600 group-focus-within:text-accent transition-colors" />
+          {/* Satisfying Command Center */}
+          <div className="mb-20 md:mb-32 space-y-10">
+            
+            {/* Filter Pills with Shared Layout Animation */}
+            <motion.div variants={itemVariants} className="relative">
+              <div className="flex items-center gap-2 overflow-x-auto pb-4 no-scrollbar scroll-smooth">
+                <button
+                  onClick={() => setSelectedTech(null)}
+                  className={`relative flex-shrink-0 px-6 py-3 rounded-xl text-[10px] uppercase tracking-[0.2em] font-bold transition-colors duration-300 ${!selectedTech ? 'text-background' : 'text-neutral-600 hover:text-neutral-400'}`}
+                >
+                  {!selectedTech && (
+                    <motion.div 
+                      layoutId="activeFilter"
+                      className="absolute inset-0 bg-accent rounded-xl"
+                      transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                    />
+                  )}
+                  <span className="relative z-10">All_Artifacts [{PROJECTS.length}]</span>
+                </button>
+                
+                {techStats.map(([tech, count]) => (
+                  <button
+                    key={tech}
+                    onClick={() => setSelectedTech(tech === selectedTech ? null : tech)}
+                    className={`relative flex-shrink-0 px-6 py-3 rounded-xl text-[10px] uppercase tracking-[0.2em] font-bold transition-colors duration-300 ${selectedTech === tech ? 'text-background' : 'text-neutral-600 hover:text-neutral-400'}`}
+                  >
+                    {selectedTech === tech && (
+                      <motion.div 
+                        layoutId="activeFilter"
+                        className="absolute inset-0 bg-accent rounded-xl shadow-[0_0_20px_rgba(255,255,255,0.1)]"
+                        transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
+                      />
+                    )}
+                    <span className="relative z-10">{tech.replace(' ', '_')} [{count}]</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+
+            {/* Terminal Search & Sort Deck */}
+            <div className="flex flex-col lg:flex-row gap-4">
+              <motion.div variants={itemVariants} className="flex-grow group relative">
+                <div className="absolute inset-y-0 left-6 flex items-center pointer-events-none">
+                  <span className="text-accent/30 font-mono text-xs mr-2">$</span>
+                  <Search className="w-3.5 h-3.5 text-neutral-700 group-focus-within:text-accent transition-colors" />
                 </div>
                 <input
                   type="text"
-                  placeholder="Scan directory..."
+                  placeholder="Execute search sequence..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-white/[0.02] border border-white/5 pl-12 pr-12 py-4 text-accent placeholder-neutral-700 focus:outline-none focus:border-accent/20 focus:bg-white/[0.04] rounded-xl transition-all text-[11px] uppercase tracking-wider"
+                  className="w-full bg-white/[0.02] border border-white/5 pl-16 pr-12 py-5 text-accent placeholder-neutral-800 focus:outline-none focus:border-white/10 focus:bg-white/[0.04] rounded-2xl transition-all text-[11px] uppercase tracking-[0.1em] font-mono"
                 />
-                {searchQuery && (
-                  <button 
-                    onClick={() => setSearchQuery('')}
-                    className="absolute right-5 top-1/2 -translate-y-1/2 text-neutral-600 hover:text-accent transition-colors"
-                  >
-                    <X size={14} />
-                  </button>
-                )}
-              </motion.div>
-
-              {/* Pill Filters */}
-              <motion.div variants={itemVariants} className="w-full overflow-hidden relative">
-                <div className="flex items-center gap-3 overflow-x-auto pb-2 scrollbar-hide no-scrollbar">
-                  <button
-                    onClick={() => setSelectedTech(null)}
-                    className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] uppercase tracking-widest font-bold transition-all border ${!selectedTech ? 'bg-accent text-background border-accent' : 'bg-transparent text-neutral-600 border-white/5 hover:border-white/20'}`}
-                  >
-                    All_Stacks
-                  </button>
-                  {availableTechs.map(tech => (
-                    <button
-                      key={tech}
-                      onClick={() => setSelectedTech(tech === selectedTech ? null : tech)}
-                      className={`flex-shrink-0 px-5 py-2.5 rounded-full text-[10px] uppercase tracking-widest font-bold transition-all border ${selectedTech === tech ? 'bg-accent text-background border-accent' : 'bg-transparent text-neutral-600 border-white/5 hover:border-white/20 hover:text-neutral-400'}`}
-                    >
-                      {tech.replace(' ', '_')}
+                <div className="absolute right-6 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                   {searchQuery && (
+                    <button onClick={() => setSearchQuery('')} className="text-neutral-600 hover:text-accent transition-colors">
+                      <X size={14} />
                     </button>
-                  ))}
+                  )}
+                  <div className="w-1.5 h-4 bg-accent/20 animate-pulse rounded-full" />
                 </div>
               </motion.div>
 
-              {/* Sort Dropdown */}
               <motion.div variants={itemVariants} className="relative flex-shrink-0" ref={sortRef}>
                 <button
                     onClick={() => setIsSortOpen(!isSortOpen)}
-                    className={`flex items-center gap-4 bg-white/[0.02] border border-white/5 px-6 py-4 text-[10px] uppercase tracking-widest rounded-xl transition-all hover:bg-white/[0.04] ${sortBy !== 'default' ? 'text-accent border-accent/20' : 'text-neutral-500'}`}
+                    className={`h-full flex items-center gap-6 bg-white/[0.02] border border-white/5 px-8 py-5 text-[10px] uppercase tracking-[0.3em] rounded-2xl transition-all hover:bg-white/[0.04] font-mono ${sortBy !== 'default' ? 'text-accent border-accent/20' : 'text-neutral-600'}`}
                 >
-                    <Filter size={14} className="opacity-40" />
-                    <span className="font-bold">{sortLabel}</span>
-                    <ChevronDown className={`w-3.5 h-3.5 opacity-40 transition-transform duration-300 ${isSortOpen ? 'rotate-180' : ''}`} />
+                    <Filter size={12} className="opacity-40" />
+                    <span>Sort::{sortLabel}</span>
+                    <ChevronDown className={`w-3 h-3 opacity-40 transition-transform duration-500 ${isSortOpen ? 'rotate-180' : ''}`} />
                 </button>
                 <AnimatePresence>
                     {isSortOpen && (
                         <motion.ul
-                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            initial={{ opacity: 0, y: 10, scale: 0.98 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                            className="absolute top-full mt-2 right-0 w-48 bg-[#0d0d0d] border border-white/10 rounded-2xl shadow-2xl z-50 overflow-hidden backdrop-blur-3xl p-1"
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            className="absolute top-full mt-3 right-0 w-56 bg-[#0a0a0a] border border-white/10 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] z-50 overflow-hidden backdrop-blur-3xl p-2"
                         >
                             {sortOptions.map(option => (
                                 <li
                                     key={option.value}
                                     onClick={() => { setSortBy(option.value); setIsSortOpen(false); }}
-                                    className={`px-4 py-3 text-[10px] uppercase tracking-widest cursor-pointer rounded-xl transition-all ${sortBy === option.value ? 'bg-accent text-background font-black' : 'text-neutral-500 hover:text-accent hover:bg-white/5'}`}
+                                    className={`px-5 py-4 text-[9px] uppercase tracking-[0.2em] cursor-pointer rounded-xl transition-all font-mono ${sortBy === option.value ? 'bg-white/10 text-accent' : 'text-neutral-600 hover:text-accent hover:bg-white/5'}`}
                                 >
                                     {option.label}
                                 </li>
@@ -194,30 +222,11 @@ const Portfolio = () => {
                 </AnimatePresence>
               </motion.div>
             </div>
-            
-            <AnimatePresence>
-              {hasActiveFilters && (
-                <motion.div 
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="flex justify-center"
-                >
-                  <button 
-                    onClick={resetFilters}
-                    className="flex items-center gap-2 text-[9px] uppercase tracking-[0.3em] text-neutral-600 hover:text-accent transition-colors py-2 border-b border-white/5 hover:border-accent/40"
-                  >
-                    <X size={10} />
-                    Reset Archive Filters
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           {/* Project List */}
           <motion.div 
-              className="flex flex-col items-center gap-12 md:gap-32 max-w-5xl mx-auto"
+              className="flex flex-col items-center gap-16 md:gap-40 max-w-5xl mx-auto"
               variants={containerVariants}
           >
               {displayedProjects.map((project) => (
@@ -229,40 +238,39 @@ const Portfolio = () => {
               {displayedProjects.length > 0 && (
                 <motion.div 
                   variants={itemVariants}
-                  className="w-full pt-16 flex flex-col items-center gap-6 opacity-20 group hover:opacity-100 transition-opacity duration-700"
+                  className="w-full pt-16 flex flex-col items-center gap-8 opacity-20 hover:opacity-100 transition-opacity duration-1000"
                 >
-                    <div className="relative">
-                      <motion.div 
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 12, repeat: Infinity, ease: "linear" }}
-                        className="text-accent/20"
-                      >
-                        <Loader2 className="w-12 h-12 md:w-16 md:h-16" strokeWidth={0.5} />
-                      </motion.div>
-                    </div>
-                    <div className="text-center space-y-2">
-                      <h4 className="text-[8px] md:text-[9px] uppercase tracking-[0.6em] font-mono text-neutral-500">
-                        Synthesizing_Future_Artifacts
+                    <div className="flex items-center gap-4">
+                      <div className="h-[1px] w-12 bg-white/20" />
+                      <h4 className="text-[8px] md:text-[9px] uppercase tracking-[0.8em] font-mono text-neutral-500">
+                        End_Of_Archive
                       </h4>
+                      <div className="h-[1px] w-12 bg-white/20" />
                     </div>
                 </motion.div>
               )}
               
               {displayedProjects.length === 0 && (
-                   <div className="text-center py-40 w-full space-y-8">
-                      <div className="relative inline-block">
-                        <Loader2 className="w-12 h-12 text-neutral-900 mx-auto" strokeWidth={1} />
-                        <X className="absolute inset-0 m-auto w-4 h-4 text-neutral-700" />
+                   <div className="text-center py-40 w-full space-y-10">
+                      <div className="relative inline-flex items-center justify-center">
+                        <motion.div 
+                          animate={{ rotate: 360 }}
+                          transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+                          className="absolute inset-0 border border-dashed border-white/5 rounded-full scale-150"
+                        />
+                        <div className="relative bg-white/5 p-8 rounded-full">
+                          <Search className="w-10 h-10 text-neutral-800" strokeWidth={1} />
+                        </div>
                       </div>
-                      <div className="space-y-2">
-                        <p className="text-[10px] md:text-sm text-neutral-600 uppercase tracking-[0.4em] font-mono">
-                          Search sequence returned zero results.
+                      <div className="space-y-4">
+                        <p className="text-[10px] md:text-sm text-neutral-500 uppercase tracking-[0.5em] font-mono">
+                          Directory scanning failed. 0 fragments found.
                         </p>
                         <button 
                           onClick={resetFilters}
-                          className="text-accent text-[9px] uppercase tracking-widest border-b border-accent/20 hover:border-accent transition-colors pb-1"
+                          className="px-8 py-3 bg-white/5 text-accent text-[9px] uppercase tracking-widest rounded-full border border-white/10 hover:bg-accent hover:text-background transition-all"
                         >
-                          Clear Archive Filters
+                          Reset System Parameters
                         </button>
                       </div>
                   </div>
