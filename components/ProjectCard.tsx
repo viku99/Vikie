@@ -26,12 +26,13 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
       <motion.div 
         layoutId={`project-container-${project.id}`} 
         className="relative aspect-video overflow-hidden bg-[#0d0d0d] rounded-xl md:rounded-2xl ring-1 ring-white/5 group-hover:ring-white/10 transition-all duration-700 shadow-xl"
+        style={{ transform: 'translate3d(0,0,0)' }}
       >
         <div className="absolute inset-0 z-0">
           <motion.img
             src={project.imageUrl}
-            alt={`Cover image for ${project.title} - ${project.category} by Vikas Bala`}
-            className="w-full h-full object-cover grayscale opacity-60 md:opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] scale-[1.01] group-hover:scale-105"
+            alt={`Cover image for ${project.title}`}
+            className="w-full h-full object-cover grayscale opacity-60 md:opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] scale-[1.01] group-hover:scale-105 will-change-transform"
             loading="lazy"
             onLoad={() => setIsImageLoaded(true)}
             initial={{ opacity: 0 }}
@@ -73,9 +74,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
         {isHovered && (
             <motion.div 
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 0.1 }}
+                animate={{ opacity: 0.08 }}
                 exit={{ opacity: 0 }}
-                className="absolute -inset-4 md:-inset-10 bg-accent blur-[40px] md:blur-[120px] -z-10 rounded-full hidden md:block"
+                className="absolute -inset-4 md:-inset-10 bg-accent blur-[40px] md:blur-[120px] -z-10 rounded-full hidden md:block pointer-events-none"
             />
         )}
       </AnimatePresence>

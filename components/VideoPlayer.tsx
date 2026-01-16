@@ -38,9 +38,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const { activeVideoId, setActiveVideoId } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
-  const isReadyRef = useRef(false);
-  const isMountedRef = useRef(true);
   
+  const [isInView, setIsInView] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
@@ -48,29 +47,36 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [showStatusIcon, setShowStatusIcon] = useState<'play' | 'pause' | 'mute' | 'unmute' | null>(null);
   
   const playerId = useRef(`player-${Math.random().toString(36).substr(2, 9)}`).current;
+  const isMounted = useRef(true);
 
   // ============================================================================
-  // COORDINATION & FULLSCREEN LOGIC
+  // INTERSECTION OBSERVER (Lazy Loading)
   // ============================================================================
-  
   useEffect(() => {
-    isMountedRef.current = true;
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsInView(entry.isIntersecting);
+        // Pause if we scroll away and this was the active video
+        if (!entry.isIntersecting && activeVideoId === playerId) {
+          if (type === 'youtube') playerRef.current?.pauseVideo();
+          else (playerRef.current as HTMLVideoElement)?.pause();
+        }
+      },
+      { threshold: 0.1 }
+    );
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
-    
+    if (containerRef.current) observer.observe(containerRef.current);
     return () => {
-      isMountedRef.current = false;
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+      isMounted.current = false;
+      observer.disconnect();
     };
-  }, []);
+  }, [activeVideoId, playerId, type]);
 
+  // ============================================================================
+  // COORDINATION LOGIC
+  // ============================================================================
   useEffect(() => {
-    if (!isReadyRef.current || !playerRef.current) return;
+    if (!isReady || !playerRef.current || !isInView) return;
 
     const isActive = activeVideoId === playerId;
 
@@ -97,15 +103,13 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     } catch (err) {
       console.warn("Playback sync error:", err);
     }
-  }, [activeVideoId, playerId, type]);
+  }, [activeVideoId, playerId, type, isReady, isInView]);
 
   // ============================================================================
   // YOUTUBE ENGINE
   // ============================================================================
-
   const onPlayerReady = useCallback((event: any) => {
-    if (!isMountedRef.current) return;
-    isReadyRef.current = true;
+    if (!isMounted.current) return;
     setIsReady(true);
     
     if (activeVideoId === playerId) {
@@ -116,7 +120,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [activeVideoId, playerId]);
 
   const onPlayerStateChange = useCallback((event: any) => {
-    if (!isMountedRef.current) return;
+    if (!isMounted.current) return;
     if (event.data === 1) setIsPlaying(true);
     else if (event.data === 2) setIsPlaying(false);
     else if (event.data === 0) {
@@ -126,7 +130,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, []);
 
   const initYT = useCallback(() => {
-    if (!isMountedRef.current || !window.YT || !window.YT.Player || playerRef.current) return;
+    if (!isMounted.current || !window.YT || !window.YT.Player || playerRef.current || !isInView) return;
     
     playerRef.current = new window.YT.Player(playerId, {
       width: '100%',
@@ -152,12 +156,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         onStateChange: onPlayerStateChange,
       }
     });
-  }, [src, autoplay, playerId, onPlayerReady, onPlayerStateChange]);
+  }, [src, autoplay, playerId, onPlayerReady, onPlayerStateChange, isInView]);
 
   useEffect(() => {
-    if (type !== 'youtube') {
-      isReadyRef.current = true;
-      setIsReady(true);
+    if (type !== 'youtube' || !isInView) {
+      if (type !== 'youtube') setIsReady(true);
       return;
     }
 
@@ -183,19 +186,16 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (playerRef.current?.destroy) {
         playerRef.current.destroy();
         playerRef.current = null;
-        isReadyRef.current = false;
       }
-      // Remove self from initializers if unmounted before script load
       if (window._ytInitializers) {
         window._ytInitializers = window._ytInitializers.filter(cb => cb !== initYT);
       }
     };
-  }, [type, initYT]);
+  }, [type, initYT, isInView]);
 
   // ============================================================================
   // HANDLERS
   // ============================================================================
-
   const handleInteraction = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     if (!isReady) return;
@@ -216,7 +216,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     }
     
     setTimeout(() => {
-        if (isMountedRef.current) setShowStatusIcon(null);
+        if (isMounted.current) setShowStatusIcon(null);
     }, 800);
   };
 
@@ -239,7 +239,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     
     setShowStatusIcon(nextMute ? 'mute' : 'unmute');
     setTimeout(() => {
-        if (isMountedRef.current) setShowStatusIcon(null);
+        if (isMounted.current) setShowStatusIcon(null);
     }, 800);
   };
 
@@ -265,32 +265,39 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden bg-black group/vid touch-action-manipulation ${className} ${isFullscreen ? 'z-[9999]' : ''}`}
+      className={`relative w-full h-full overflow-hidden bg-black group/vid touch-action-manipulation antialiased ${className} ${isFullscreen ? 'z-[9999]' : ''}`}
       onClick={handleInteraction}
-      style={{ transform: 'translateZ(0)' }}
+      style={{ transform: 'translate3d(0,0,0)' }}
     >
-      {type === 'youtube' ? (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-          <div className={`relative flex-shrink-0 will-change-transform ${isFullscreen ? 'w-full h-full' : 'w-[116%] h-[116%]'}`}>
-            <div id={playerId} className="w-full h-full" />
-          </div>
-        </div>
+      {isInView ? (
+        <>
+          {type === 'youtube' ? (
+            <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
+              <div className={`relative flex-shrink-0 will-change-transform ${isFullscreen ? 'w-full h-full' : 'w-[102%] h-[102%] md:w-[105%] md:h-[105%]'}`}>
+                <div id={playerId} className="w-full h-full" />
+              </div>
+            </div>
+          ) : (
+            <video 
+              ref={playerRef}
+              className="w-full h-full object-cover will-change-transform" 
+              src={src} 
+              muted={isMuted} 
+              loop 
+              playsInline 
+              autoPlay={autoplay}
+              onPlay={() => setIsPlaying(true)}
+              onPause={() => setIsPlaying(false)}
+            />
+          )}
+        </>
       ) : (
-        <video 
-          ref={playerRef}
-          className="w-full h-full object-cover will-change-transform" 
-          src={src} 
-          muted={isMuted} 
-          loop 
-          // Removed non-standard webkitPlaysInline property to fix TypeScript error
-          playsInline 
-          autoPlay={autoplay}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
-        />
+        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+            <Loader2 className="w-6 h-6 text-accent/10 animate-spin" strokeWidth={1} />
+        </div>
       )}
 
-      {!isReady && (
+      {!isReady && isInView && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
           <Loader2 className="w-8 h-8 md:w-10 md:h-10 text-accent/20 animate-spin" strokeWidth={1} />
         </div>
@@ -301,7 +308,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         <button 
           onClick={toggleFullscreen}
           className="p-3 md:p-4 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white active:scale-90 transition-all hover:bg-accent hover:text-background"
-          aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
         >
           {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
         </button>
