@@ -1,11 +1,10 @@
 
-import React, { useMemo, useEffect, useState, useRef } from 'react';
+import React, { useMemo, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { motion, Variants, AnimatePresence } from 'framer-motion';
-import { ArrowLeft, X, Cpu, Zap, ChevronDown, Terminal } from 'lucide-react';
+import { motion, Variants } from 'framer-motion';
+import { ArrowLeft, Terminal } from 'lucide-react';
 import { PROJECTS } from '../constants';
 import VideoPlayer from '../components/VideoPlayer';
-import { useAppContext } from '../contexts/AppContext';
 
 const fadeUp: Variants = {
     hidden: { opacity: 0, y: 30 },
@@ -18,10 +17,6 @@ const fadeUp: Variants = {
 
 const ProjectDetail = () => {
   const { projectId } = useParams();
-  const { setActiveVideoId, setIsGlobalMuted } = useAppContext();
-  const [showAiNotice, setShowAiNotice] = useState(false);
-  const [isReelsMode, setIsReelsMode] = useState(false);
-  const reelsContainerRef = useRef<HTMLDivElement>(null);
 
   const projectIndex = useMemo(() => 
     PROJECTS.findIndex((p) => p.id === projectId),
@@ -33,131 +28,13 @@ const ProjectDetail = () => {
 
   useEffect(() => {
     window.scrollTo(0, 0);
-    setIsReelsMode(false);
-    setActiveVideoId(null);
-    
-    if (projectId === 'the-vision-series') {
-      const timer = setTimeout(() => setShowAiNotice(true), 1200);
-      return () => clearTimeout(timer);
-    }
-  }, [projectId, setActiveVideoId]);
-
-  // ============================================================================
-  // REELS OBSERVER - SNAP AUTOPLAY
-  // ============================================================================
-  useEffect(() => {
-    if (!isReelsMode || !reelsContainerRef.current) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        // We only care about the most visible entry
-        const visibleEntry = entries.find(e => e.isIntersecting);
-        if (visibleEntry) {
-          const id = visibleEntry.target.getAttribute('data-reel-id');
-          if (id) setActiveVideoId(id);
-        }
-      },
-      {
-        root: reelsContainerRef.current,
-        threshold: 0.6, // Trigger as soon as the video is majority-visible
-      }
-    );
-
-    const elements = reelsContainerRef.current.querySelectorAll('[data-reel-id]');
-    elements.forEach((el) => observer.observe(el));
-
-    return () => observer.disconnect();
-  }, [isReelsMode, setActiveVideoId]);
+  }, [projectId]);
 
   if (!project || !nextProject) return null;
-
-  const enterReelsMode = () => {
-    setIsGlobalMuted(false); 
-    setIsReelsMode(true);
-    const firstId = `reel-${projectId}-0`;
-    setActiveVideoId(firstId);
-    document.body.style.overflow = 'hidden';
-  };
-
-  const exitReelsMode = () => {
-    setIsReelsMode(false);
-    setActiveVideoId(null);
-    document.body.style.overflow = 'auto';
-  };
 
   return (
     <motion.div initial="hidden" animate="visible" className="bg-background text-accent min-h-screen">
       
-      {/* REELS MODE OVERLAY */}
-      <AnimatePresence>
-        {isReelsMode && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] bg-black"
-          >
-            <button 
-              onClick={exitReelsMode}
-              className="fixed top-8 right-8 z-[210] p-4 bg-white/5 backdrop-blur-3xl rounded-full text-white hover:bg-white hover:text-black transition-all shadow-2xl"
-            >
-              <X size={24} />
-            </button>
-
-            <div 
-              ref={reelsContainerRef}
-              className="h-screen w-full overflow-y-scroll snap-y snap-mandatory no-scrollbar bg-black"
-            >
-              {project.gallery?.map((item, idx) => {
-                const reelId = `reel-${projectId}-${idx}`;
-                return (
-                  <div 
-                    key={idx} 
-                    data-reel-id={reelId}
-                    className="h-screen w-full snap-start relative flex items-center justify-center overflow-hidden"
-                  >
-                    <div className="w-full h-full md:max-w-[420px] md:h-[88vh] aspect-[9/16] bg-neutral-900 shadow-[0_0_100px_rgba(0,0,0,1)] md:rounded-[2.5rem] overflow-hidden">
-                      <VideoPlayer 
-                        type={item.type as 'youtube' | 'local'} 
-                        src={item.src} 
-                        autoplay={idx === 0}
-                        isReelsMode={true}
-                        reelId={reelId}
-                      />
-                    </div>
-                    
-                    <div className="absolute bottom-12 left-8 md:left-[calc(50%-180px)] pointer-events-none z-20 max-w-[280px]">
-                      <motion.div
-                        initial={{ opacity: 0, y: 15 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        className="space-y-1"
-                      >
-                        <span className="text-[10px] uppercase tracking-[0.4em] font-mono text-white/30 drop-shadow-md">
-                          Artifact // 0{idx + 1}
-                        </span>
-                        <h4 className="text-xl font-black uppercase tracking-tighter text-white drop-shadow-[0_4px_12px_rgba(0,0,0,1)]">
-                          {item.label || project.title}
-                        </h4>
-                      </motion.div>
-                    </div>
-
-                    {idx === 0 && (
-                      <motion.div 
-                        animate={{ y: [0, 10, 0] }}
-                        transition={{ repeat: Infinity, duration: 2.5 }}
-                        className="absolute bottom-6 left-1/2 -translate-x-1/2 text-white/20 pointer-events-none"
-                      >
-                        <ChevronDown size={24} />
-                      </motion.div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       {/* STANDARD PROJECT VIEW */}
       <section className="pt-32 px-6">
         <div className="container mx-auto">
@@ -171,37 +48,24 @@ const ProjectDetail = () => {
                     </div>
                     <h1 className="text-4xl md:text-[8vw] font-black uppercase tracking-tighter leading-[0.85]">{project.title}</h1>
                   </div>
-                  
-                  <button 
-                    onClick={enterReelsMode}
-                    className="group relative flex items-center gap-4 bg-accent text-background px-10 py-5 rounded-full font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-2xl"
-                  >
-                    <Zap size={16} fill="currentColor" />
-                    Enter Reels Mode
-                    <div className="absolute inset-0 bg-white/20 -translate-x-full group-hover:translate-x-full transition-transform duration-700" />
-                  </button>
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {project.gallery?.map((item, idx) => {
-                    const reelId = `gallery-${project.id}-${idx}`;
-                    return (
-                      <motion.div key={idx} variants={fadeUp} className="relative aspect-video rounded-3xl overflow-hidden border border-white/5 bg-primary shadow-2xl">
-                        <VideoPlayer 
-                          type={item.type as 'youtube' | 'local'} 
-                          src={item.src} 
-                          autoplay={false} 
-                          reelId={reelId}
-                        />
-                      </motion.div>
-                    );
-                  })}
+                  {project.gallery?.map((item, idx) => (
+                    <motion.div key={idx} variants={fadeUp} className="relative aspect-video rounded-3xl overflow-hidden border border-white/5 bg-primary shadow-2xl">
+                      <VideoPlayer 
+                        type={item.type as 'youtube' | 'local'} 
+                        src={item.src} 
+                        autoplay={false} 
+                      />
+                    </motion.div>
+                  ))}
                 </div>
               </div>
             ) : (
               <div className="space-y-12">
                 <motion.div layoutId={`project-container-${project.id}`} className="relative aspect-video rounded-3xl overflow-hidden border border-white/5 bg-primary shadow-2xl">
-                    <VideoPlayer {...project.heroVideo} showControls={true} reelId={`hero-${project.id}`} />
+                    <VideoPlayer {...project.heroVideo} showControls={true} />
                 </motion.div>
                 <h1 className="text-4xl md:text-[10vw] font-black uppercase tracking-tighter leading-[0.85]">{project.title}</h1>
               </div>
@@ -209,6 +73,7 @@ const ProjectDetail = () => {
         </div>
       </section>
 
+      {/* DETAILS GRID */}
       <section className="py-32 px-6 border-t border-white/5 mt-32">
         <div className="container mx-auto grid grid-cols-1 lg:grid-cols-12 gap-16">
           <div className="lg:col-span-4 space-y-12">
@@ -239,6 +104,7 @@ const ProjectDetail = () => {
         </div>
       </section>
 
+      {/* NEXT PROJECT CALL TO ACTION */}
       <section className="border-t border-white/5 pt-32 pb-40 px-6 text-center">
         <Link to={`/portfolio/${nextProject.id}`} className="group space-y-8 block">
           <span className="text-[10px] uppercase tracking-[1em] text-neutral-600 block">Next_Artifact</span>

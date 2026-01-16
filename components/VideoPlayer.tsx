@@ -6,10 +6,8 @@ import {
   Pause, 
   Volume2, 
   VolumeX, 
-  RotateCcw,
   Loader2
 } from 'lucide-react';
-import { useAppContext } from '../contexts/AppContext';
 
 interface VideoPlayerProps {
   type: 'local' | 'youtube' | 'video';
@@ -17,8 +15,6 @@ interface VideoPlayerProps {
   className?: string;
   showControls?: boolean;
   autoplay?: boolean;
-  isReelsMode?: boolean;
-  reelId?: string;
 }
 
 declare global {
@@ -34,74 +30,24 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   src, 
   className = "", 
   showControls = true, 
-  autoplay = true,
-  isReelsMode = false,
-  reelId
+  autoplay = false
 }) => {
-  const { activeVideoId, setActiveVideoId, isGlobalMuted, setIsGlobalMuted } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
-  const isReadyRef = useRef(false);
-  const holdTimerRef = useRef<number | null>(null);
-  const isHoldingRef = useRef(false);
-  
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(autoplay);
   const [isReady, setIsReady] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [showStatusIcon, setShowStatusIcon] = useState<'play' | 'pause' | 'mute' | 'unmute' | null>(null);
-  
-  // Stable ID to prevent re-renders of the video container
-  const playerId = useRef(reelId || `v-${Math.random().toString(36).slice(2, 11)}`).current;
+  const playerId = useRef(`v-${Math.random().toString(36).slice(2, 11)}`).current;
 
-  // ============================================================================
-  // PLAYBACK COORDINATOR
-  // ============================================================================
-  
-  const applyPlaybackState = useCallback(() => {
-    if (!isReadyRef.current || !playerRef.current) return;
-    const isActive = activeVideoId === playerId;
-
-    try {
-      if (type === 'youtube') {
-        if (isActive && !isHoldingRef.current) {
-          playerRef.current.playVideo?.();
-          if (isGlobalMuted) playerRef.current.mute?.();
-          else {
-            playerRef.current.unMute?.();
-            playerRef.current.setVolume?.(100);
-          }
-        } else {
-          playerRef.current.pauseVideo?.();
-        }
-      } else {
-        const video = playerRef.current as HTMLVideoElement;
-        if (isActive && !isHoldingRef.current) {
-          video.muted = isGlobalMuted;
-          video.play().catch(() => {});
-        } else {
-          video.pause();
-        }
-      }
-    } catch (e) {
-      // Catching errors silently to prevent app crashes on API race conditions
-    }
-  }, [activeVideoId, playerId, isGlobalMuted, type]);
-
-  useEffect(() => {
-    applyPlaybackState();
-  }, [applyPlaybackState]);
-
-  // ============================================================================
-  // YOUTUBE API ENGINE
-  // ============================================================================
-
-  const onPlayerReady = useCallback(() => {
-    isReadyRef.current = true;
+  const onPlayerReady = useCallback((event: any) => {
     setIsReady(true);
-    applyPlaybackState();
-  }, [applyPlaybackState]);
+    if (autoplay) {
+      event.target.playVideo();
+    }
+  }, [autoplay]);
 
   const onPlayerStateChange = useCallback((event: any) => {
-    // 1 = PLAYING, 2 = PAUSED, 0 = ENDED
     if (event.data === 1) setIsPlaying(true);
     else if (event.data === 2) setIsPlaying(false);
     else if (event.data === 0) {
@@ -121,7 +67,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         rel: 0,
         modestbranding: 1,
         playsinline: 1,
-        mute: isGlobalMuted ? 1 : 0,
+        mute: 1,
         loop: 1,
         playlist: src,
         enablejsapi: 1,
@@ -132,11 +78,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         onStateChange: onPlayerStateChange,
       }
     });
-  }, [src, autoplay, playerId, isGlobalMuted, onPlayerReady, onPlayerStateChange]);
+  }, [src, autoplay, playerId, onPlayerReady, onPlayerStateChange]);
 
   useEffect(() => {
     if (type !== 'youtube') {
-      isReadyRef.current = true;
       setIsReady(true);
       return;
     }
@@ -161,87 +106,52 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (playerRef.current?.destroy) {
         playerRef.current.destroy();
         playerRef.current = null;
-        isReadyRef.current = false;
       }
     };
   }, [type, initYT]);
 
-  // ============================================================================
-  // REELS INTERACTIONS
-  // ============================================================================
-
-  const handlePointerDown = (e: React.PointerEvent) => {
-    if (!isReelsMode || !isReady) return;
-    
-    // Hold to pause logic
-    holdTimerRef.current = window.setTimeout(() => {
-      isHoldingRef.current = true;
-      if (type === 'youtube') playerRef.current?.pauseVideo?.();
-      else playerRef.current?.pause();
-      setShowStatusIcon('pause');
-    }, 200);
-  };
-
-  const handlePointerUp = () => {
-    if (!isReelsMode || !isReady) return;
-
-    if (holdTimerRef.current) {
-      clearTimeout(holdTimerRef.current);
-      holdTimerRef.current = null;
-    }
-
-    if (isHoldingRef.current) {
-      isHoldingRef.current = false;
-      setShowStatusIcon(null);
-      // Resume if this is still the active reel
-      if (activeVideoId === playerId) {
-        if (type === 'youtube') playerRef.current?.playVideo?.();
-        else playerRef.current?.play().catch(() => {});
-      }
-    }
-  };
-
-  const handleTap = (e: React.MouseEvent) => {
-    // Prevent tap event firing after a long hold
-    if (isHoldingRef.current) return;
-    
+  const togglePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isReady) return;
 
-    if (isReelsMode) {
-      // Tap to toggle Mute globally
-      const newMuted = !isGlobalMuted;
-      setIsGlobalMuted(newMuted);
-      setShowStatusIcon(newMuted ? 'mute' : 'unmute');
-      setTimeout(() => setShowStatusIcon(null), 800);
+    if (isPlaying) {
+      if (type === 'youtube') playerRef.current?.pauseVideo();
+      else playerRef.current?.pause();
+      setShowStatusIcon('pause');
     } else {
-      // Toggle play/pause or set active
-      if (activeVideoId === playerId) {
-        if (isPlaying) {
-          if (type === 'youtube') playerRef.current?.pauseVideo?.();
-          else playerRef.current?.pause();
-        } else {
-          if (type === 'youtube') playerRef.current?.playVideo?.();
-          else playerRef.current?.play().catch(() => {});
-        }
-      } else {
-        setActiveVideoId(playerId);
-      }
+      if (type === 'youtube') playerRef.current?.playVideo();
+      else playerRef.current?.play().catch(() => {});
+      setShowStatusIcon('play');
     }
+    setTimeout(() => setShowStatusIcon(null), 800);
+  };
+
+  const toggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const nextMute = !isMuted;
+    setIsMuted(nextMute);
+    
+    if (type === 'youtube') {
+      if (nextMute) playerRef.current?.mute();
+      else {
+        playerRef.current?.unMute();
+        playerRef.current?.setVolume(100);
+      }
+    } else if (playerRef.current) {
+      (playerRef.current as HTMLVideoElement).muted = nextMute;
+    }
+    setShowStatusIcon(nextMute ? 'mute' : 'unmute');
+    setTimeout(() => setShowStatusIcon(null), 800);
   };
 
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden bg-black select-none cursor-pointer group/vid ${className}`}
-      onPointerDown={handlePointerDown}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-      onClick={handleTap}
+      className={`relative w-full h-full overflow-hidden bg-black group/vid ${className}`}
+      onClick={togglePlay}
     >
       {type === 'youtube' ? (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          {/* We wrap the ID in a div that never changes to keep YT API happy */}
           <div className="w-full h-full scale-[1.15] pointer-events-none">
             <div id={playerId} />
           </div>
@@ -251,22 +161,37 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           ref={playerRef}
           className="w-full h-full object-cover" 
           src={src} 
-          muted={isGlobalMuted} 
+          muted={isMuted} 
           loop 
           playsInline 
+          autoPlay={autoplay}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
         />
       )}
 
-      {/* Loading */}
       {!isReady && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
           <Loader2 className="w-10 h-10 text-accent/20 animate-spin" strokeWidth={1} />
         </div>
       )}
 
-      {/* Status Icons Overlay */}
+      {/* Manual Controls Overlay */}
+      <div className="absolute bottom-6 right-6 z-30 flex gap-3 opacity-0 group-hover/vid:opacity-100 transition-opacity">
+        <button 
+          onClick={toggleMute}
+          className="p-3 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-accent hover:text-background transition-all"
+        >
+          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+        </button>
+        <button 
+          onClick={togglePlay}
+          className="p-3 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-accent hover:text-background transition-all"
+        >
+          {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+        </button>
+      </div>
+
       <AnimatePresence>
         {showStatusIcon && (
           <motion.div
@@ -284,13 +209,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Persistence Indicator */}
-      {isReelsMode && isReady && (
-        <div className="absolute top-6 left-6 z-30 opacity-0 group-hover/vid:opacity-40 transition-opacity">
-          {isGlobalMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-        </div>
-      )}
     </div>
   );
 };
