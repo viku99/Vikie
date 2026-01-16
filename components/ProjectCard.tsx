@@ -17,6 +17,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
     <Link
       to={`/portfolio/${project.id}`}
       className="block group relative"
+      aria-label={`View project details for ${project.title}`}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       onTouchStart={() => setIsHovered(true)}
@@ -29,7 +30,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
         <div className="absolute inset-0 z-0">
           <motion.img
             src={project.imageUrl}
-            alt={project.title}
+            alt={`Cover image for ${project.title} - ${project.category} by Vikas Bala`}
             className="w-full h-full object-cover grayscale opacity-60 md:opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-1000 ease-[cubic-bezier(0.22,1,0.36,1)] scale-[1.01] group-hover:scale-105"
             loading="lazy"
             onLoad={() => setIsImageLoaded(true)}
