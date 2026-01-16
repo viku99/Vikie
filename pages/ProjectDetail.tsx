@@ -56,7 +56,7 @@ const ProjectDetail = () => {
                       <VideoPlayer 
                         type={item.type as 'youtube' | 'local'} 
                         src={item.src} 
-                        autoplay={false} 
+                        autoplay={idx === 0} 
                       />
                     </motion.div>
                   ))}
@@ -65,7 +65,7 @@ const ProjectDetail = () => {
             ) : (
               <div className="space-y-12">
                 <motion.div layoutId={`project-container-${project.id}`} className="relative aspect-video rounded-3xl overflow-hidden border border-white/5 bg-primary shadow-2xl">
-                    <VideoPlayer {...project.heroVideo} showControls={true} />
+                    <VideoPlayer {...project.heroVideo} showControls={true} autoplay={true} />
                 </motion.div>
                 <h1 className="text-4xl md:text-[10vw] font-black uppercase tracking-tighter leading-[0.85]">{project.title}</h1>
               </div>

@@ -50,16 +50,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const isMounted = useRef(true);
 
   // ============================================================================
-  // INTERSECTION OBSERVER (Lazy Loading)
+  // INTERSECTION OBSERVER
   // ============================================================================
   useEffect(() => {
+    isMounted.current = true;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setIsInView(entry.isIntersecting);
-        // Pause if we scroll away and this was the active video
-        if (!entry.isIntersecting && activeVideoId === playerId) {
-          if (type === 'youtube') playerRef.current?.pauseVideo();
-          else (playerRef.current as HTMLVideoElement)?.pause();
+        if (isMounted.current) {
+          setIsInView(entry.isIntersecting);
         }
       },
       { threshold: 0.1 }
@@ -70,40 +68,45 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       isMounted.current = false;
       observer.disconnect();
     };
-  }, [activeVideoId, playerId, type]);
+  }, []);
 
   // ============================================================================
-  // COORDINATION LOGIC
+  // COORDINATION & AUTOPLAY LOGIC
   // ============================================================================
   useEffect(() => {
     if (!isReady || !playerRef.current || !isInView) return;
 
-    const isActive = activeVideoId === playerId;
+    // A video should play if it's explicitly active OR if it's the only one in view with autoplay
+    const isActive = activeVideoId === playerId || (activeVideoId === null && autoplay);
 
     try {
       if (type === 'youtube') {
         if (isActive) {
-          playerRef.current.unMute?.();
-          playerRef.current.setVolume?.(100);
+          if (activeVideoId === playerId) {
+            playerRef.current.unMute?.();
+            setIsMuted(false);
+          } else {
+            playerRef.current.mute?.();
+            setIsMuted(true);
+          }
           playerRef.current.playVideo?.();
-          setIsMuted(false);
         } else {
           playerRef.current.pauseVideo?.();
         }
       } else {
         const video = playerRef.current as HTMLVideoElement;
         if (isActive) {
-          video.muted = false;
+          video.muted = activeVideoId !== playerId;
+          setIsMuted(video.muted);
           video.play().catch(() => {});
-          setIsMuted(false);
         } else {
           video.pause();
         }
       }
     } catch (err) {
-      console.warn("Playback sync error:", err);
+      console.warn("Video coordination error:", err);
     }
-  }, [activeVideoId, playerId, type, isReady, isInView]);
+  }, [activeVideoId, playerId, type, isReady, isInView, autoplay]);
 
   // ============================================================================
   // YOUTUBE ENGINE
@@ -112,12 +115,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (!isMounted.current) return;
     setIsReady(true);
     
-    if (activeVideoId === playerId) {
-      event.target.unMute();
+    // Immediate action on ready to prevent black screen
+    if (autoplay || activeVideoId === playerId) {
       event.target.playVideo();
-      setIsMuted(false);
     }
-  }, [activeVideoId, playerId]);
+  }, [activeVideoId, playerId, autoplay]);
 
   const onPlayerStateChange = useCallback((event: any) => {
     if (!isMounted.current) return;
@@ -159,36 +161,35 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [src, autoplay, playerId, onPlayerReady, onPlayerStateChange, isInView]);
 
   useEffect(() => {
-    if (type !== 'youtube' || !isInView) {
-      if (type !== 'youtube') setIsReady(true);
+    if (type !== 'youtube') {
+      if (isInView) setIsReady(true);
       return;
     }
 
-    if (!window.YT || !window.YT.Player) {
-      if (!window._ytInitializers) {
-        window._ytInitializers = [];
-        window.onYouTubeIframeAPIReady = () => {
-          if (window._ytInitializers) {
-            window._ytInitializers.forEach(cb => cb());
-            delete window._ytInitializers;
-          }
-        };
-        const tag = document.createElement('script');
-        tag.src = "https://www.youtube.com/iframe_api";
-        document.head.appendChild(tag);
+    if (isInView) {
+      if (!window.YT || !window.YT.Player) {
+        if (!window._ytInitializers) {
+          window._ytInitializers = [];
+          window.onYouTubeIframeAPIReady = () => {
+            if (window._ytInitializers) {
+              window._ytInitializers.forEach(cb => cb());
+              delete window._ytInitializers;
+            }
+          };
+          const tag = document.createElement('script');
+          tag.src = "https://www.youtube.com/iframe_api";
+          document.head.appendChild(tag);
+        }
+        window._ytInitializers.push(initYT);
+      } else {
+        initYT();
       }
-      window._ytInitializers.push(initYT);
-    } else {
-      initYT();
     }
 
     return () => {
       if (playerRef.current?.destroy) {
         playerRef.current.destroy();
         playerRef.current = null;
-      }
-      if (window._ytInitializers) {
-        window._ytInitializers = window._ytInitializers.filter(cb => cb !== initYT);
       }
     };
   }, [type, initYT, isInView]);
@@ -265,7 +266,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden bg-black group/vid touch-action-manipulation antialiased ${className} ${isFullscreen ? 'z-[9999]' : ''}`}
+      className={`relative w-full h-full overflow-hidden bg-primary/20 group/vid touch-action-manipulation antialiased ${className} ${isFullscreen ? 'z-[9999]' : ''}`}
       onClick={handleInteraction}
       style={{ transform: 'translate3d(0,0,0)' }}
     >
@@ -273,7 +274,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         <>
           {type === 'youtube' ? (
             <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
-              <div className={`relative flex-shrink-0 will-change-transform ${isFullscreen ? 'w-full h-full' : 'w-[102%] h-[102%] md:w-[105%] md:h-[105%]'}`}>
+              <div className={`relative flex-shrink-0 ${isFullscreen ? 'w-full h-full' : 'w-[105%] h-[105%]'}`}>
                 <div id={playerId} className="w-full h-full" />
               </div>
             </div>
@@ -292,14 +293,14 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           )}
         </>
       ) : (
-        <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center">
             <Loader2 className="w-6 h-6 text-accent/10 animate-spin" strokeWidth={1} />
         </div>
       )}
 
       {!isReady && isInView && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
-          <Loader2 className="w-8 h-8 md:w-10 md:h-10 text-accent/20 animate-spin" strokeWidth={1} />
+          <Loader2 className="w-8 h-8 text-accent/20 animate-spin" strokeWidth={1} />
         </div>
       )}
 
