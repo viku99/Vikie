@@ -6,7 +6,9 @@ import {
   Pause, 
   Volume2, 
   VolumeX, 
-  Loader2
+  Loader2,
+  Maximize,
+  Minimize
 } from 'lucide-react';
 import { useAppContext } from '../contexts/AppContext';
 
@@ -41,15 +43,29 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [showStatusIcon, setShowStatusIcon] = useState<'play' | 'pause' | 'mute' | 'unmute' | null>(null);
   
-  // Generate a unique ID for this specific player instance
   const playerId = useRef(`player-${Math.random().toString(36).substr(2, 9)}`).current;
 
   // ============================================================================
-  // COORDINATION LOGIC
+  // COORDINATION & FULLSCREEN LOGIC
   // ============================================================================
   
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+    
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isReadyRef.current || !playerRef.current) return;
 
@@ -88,7 +104,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     isReadyRef.current = true;
     setIsReady(true);
     
-    // If it's already marked as the active video (e.g. from autoplay prop)
     if (activeVideoId === playerId) {
       event.target.unMute();
       event.target.playVideo();
@@ -97,11 +112,9 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   }, [activeVideoId, playerId]);
 
   const onPlayerStateChange = useCallback((event: any) => {
-    // YT.PlayerState.PLAYING = 1, PAUSED = 2
     if (event.data === 1) setIsPlaying(true);
     else if (event.data === 2) setIsPlaying(false);
     else if (event.data === 0) {
-      // Loop
       event.target.seekTo(0);
       event.target.playVideo();
     }
@@ -111,6 +124,8 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     if (!window.YT || !window.YT.Player || playerRef.current) return;
     
     playerRef.current = new window.YT.Player(playerId, {
+      width: '100%',
+      height: '100%',
       videoId: src,
       playerVars: {
         autoplay: autoplay ? 1 : 0,
@@ -118,7 +133,10 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         rel: 0,
         modestbranding: 1,
         playsinline: 1,
-        mute: 1, // Start muted to satisfy browser policies
+        iv_load_policy: 3,
+        fs: 0, // Disable native YouTube fullscreen button
+        disablekb: 1,
+        mute: 1, 
         loop: 1,
         playlist: src,
         enablejsapi: 1,
@@ -167,12 +185,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   // HANDLERS
   // ============================================================================
 
-  const handleInteraction = (e: React.MouseEvent) => {
+  const handleInteraction = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     if (!isReady) return;
 
     if (activeVideoId === playerId) {
-      // If already active, toggle play/pause
       if (isPlaying) {
         if (type === 'youtube') playerRef.current?.pauseVideo();
         else playerRef.current?.pause();
@@ -183,7 +200,6 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         setShowStatusIcon('play');
       }
     } else {
-      // Activate this player: Context update will trigger the useEffect play/unmute logic
       setActiveVideoId(playerId);
       setShowStatusIcon('play');
     }
@@ -191,7 +207,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setTimeout(() => setShowStatusIcon(null), 800);
   };
 
-  const toggleMute = (e: React.MouseEvent) => {
+  const toggleMute = (e: React.MouseEvent | React.TouchEvent) => {
     e.stopPropagation();
     if (!isReady) return;
     
@@ -212,26 +228,47 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     setTimeout(() => setShowStatusIcon(null), 800);
   };
 
+  const toggleFullscreen = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    if (!containerRef.current) return;
+
+    if (!document.fullscreenElement) {
+      if (containerRef.current.requestFullscreen) {
+        containerRef.current.requestFullscreen();
+      } else if ((containerRef.current as any).webkitRequestFullscreen) {
+        (containerRef.current as any).webkitRequestFullscreen();
+      }
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+      } else if ((document as any).webkitExitFullscreen) {
+        (document as any).webkitExitFullscreen();
+      }
+    }
+  };
+
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full overflow-hidden bg-black group/vid ${className}`}
+      className={`relative w-full h-full overflow-hidden bg-black group/vid touch-action-manipulation ${className} ${isFullscreen ? 'z-[9999]' : ''}`}
       onClick={handleInteraction}
+      style={{ transform: 'translateZ(0)' }}
     >
       {type === 'youtube' ? (
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-full h-full scale-[1.15] pointer-events-none">
-            <div id={playerId} />
+        <div className="absolute inset-0 pointer-events-none flex items-center justify-center overflow-hidden">
+          <div className={`relative flex-shrink-0 will-change-transform ${isFullscreen ? 'w-full h-full' : 'w-[116%] h-[116%]'}`}>
+            <div id={playerId} className="w-full h-full" />
           </div>
         </div>
       ) : (
         <video 
           ref={playerRef}
-          className="w-full h-full object-cover" 
+          className="w-full h-full object-cover will-change-transform" 
           src={src} 
           muted={isMuted} 
           loop 
           playsInline 
+          webkit-playsinline="true"
           autoPlay={autoplay}
           onPlay={() => setIsPlaying(true)}
           onPause={() => setIsPlaying(false)}
@@ -240,23 +277,30 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
       {!isReady && (
         <div className="absolute inset-0 z-50 flex items-center justify-center bg-black">
-          <Loader2 className="w-10 h-10 text-accent/20 animate-spin" strokeWidth={1} />
+          <Loader2 className="w-8 h-8 md:w-10 md:h-10 text-accent/20 animate-spin" strokeWidth={1} />
         </div>
       )}
 
       {/* Manual Controls Overlay */}
-      <div className="absolute bottom-6 right-6 z-30 flex gap-3 opacity-0 group-hover/vid:opacity-100 transition-opacity">
+      <div className="absolute bottom-4 right-4 md:bottom-6 md:right-6 z-30 flex gap-2 md:gap-3 opacity-0 group-hover/vid:opacity-100 transition-opacity">
+        <button 
+          onClick={toggleFullscreen}
+          className="p-3 md:p-4 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white active:scale-90 transition-all hover:bg-accent hover:text-background"
+          aria-label={isFullscreen ? "Exit Fullscreen" : "Enter Fullscreen"}
+        >
+          {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
+        </button>
         <button 
           onClick={toggleMute}
-          className="p-3 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-accent hover:text-background transition-all"
+          className="p-3 md:p-4 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white active:scale-90 transition-all hover:bg-accent hover:text-background"
         >
-          {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
+          {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </button>
         <button 
           onClick={handleInteraction}
-          className="p-3 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-accent hover:text-background transition-all"
+          className="p-3 md:p-4 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white active:scale-90 transition-all hover:bg-accent hover:text-background"
         >
-          {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+          {isPlaying ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
         </button>
       </div>
 
@@ -268,11 +312,11 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             exit={{ scale: 1.2, opacity: 0 }}
             className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
           >
-            <div className="bg-black/40 backdrop-blur-xl p-8 rounded-full border border-white/10 text-white shadow-2xl">
-              {showStatusIcon === 'pause' && <Pause fill="currentColor" size={40} />}
-              {showStatusIcon === 'mute' && <VolumeX size={40} />}
-              {showStatusIcon === 'unmute' && <Volume2 size={40} />}
-              {showStatusIcon === 'play' && <Play fill="currentColor" size={40} />}
+            <div className="bg-black/40 backdrop-blur-xl p-6 md:p-8 rounded-full border border-white/10 text-white shadow-2xl">
+              {showStatusIcon === 'pause' && <Pause fill="currentColor" size={32} className="md:w-10 md:h-10" />}
+              {showStatusIcon === 'mute' && <VolumeX size={32} className="md:w-10 md:h-10" />}
+              {showStatusIcon === 'unmute' && <Volume2 size={32} className="md:w-10 md:h-10" />}
+              {showStatusIcon === 'play' && <Play fill="currentColor" size={32} className="md:w-10 md:h-10" />}
             </div>
           </motion.div>
         )}
