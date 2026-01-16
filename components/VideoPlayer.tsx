@@ -8,6 +8,7 @@ import {
   VolumeX, 
   Loader2
 } from 'lucide-react';
+import { useAppContext } from '../contexts/AppContext';
 
 interface VideoPlayerProps {
   type: 'local' | 'youtube' | 'video';
@@ -32,25 +33,75 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
   showControls = true, 
   autoplay = false
 }) => {
+  const { activeVideoId, setActiveVideoId } = useAppContext();
   const containerRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<any>(null);
-  const [isPlaying, setIsPlaying] = useState(autoplay);
+  const isReadyRef = useRef(false);
+  
+  const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [showStatusIcon, setShowStatusIcon] = useState<'play' | 'pause' | 'mute' | 'unmute' | null>(null);
-  const playerId = useRef(`v-${Math.random().toString(36).slice(2, 11)}`).current;
+  
+  // Generate a unique ID for this specific player instance
+  const playerId = useRef(`player-${Math.random().toString(36).substr(2, 9)}`).current;
+
+  // ============================================================================
+  // COORDINATION LOGIC
+  // ============================================================================
+  
+  useEffect(() => {
+    if (!isReadyRef.current || !playerRef.current) return;
+
+    const isActive = activeVideoId === playerId;
+
+    try {
+      if (type === 'youtube') {
+        if (isActive) {
+          playerRef.current.unMute?.();
+          playerRef.current.setVolume?.(100);
+          playerRef.current.playVideo?.();
+          setIsMuted(false);
+        } else {
+          playerRef.current.pauseVideo?.();
+        }
+      } else {
+        const video = playerRef.current as HTMLVideoElement;
+        if (isActive) {
+          video.muted = false;
+          video.play().catch(() => {});
+          setIsMuted(false);
+        } else {
+          video.pause();
+        }
+      }
+    } catch (err) {
+      console.warn("Playback sync error:", err);
+    }
+  }, [activeVideoId, playerId, type]);
+
+  // ============================================================================
+  // YOUTUBE ENGINE
+  // ============================================================================
 
   const onPlayerReady = useCallback((event: any) => {
+    isReadyRef.current = true;
     setIsReady(true);
-    if (autoplay) {
+    
+    // If it's already marked as the active video (e.g. from autoplay prop)
+    if (activeVideoId === playerId) {
+      event.target.unMute();
       event.target.playVideo();
+      setIsMuted(false);
     }
-  }, [autoplay]);
+  }, [activeVideoId, playerId]);
 
   const onPlayerStateChange = useCallback((event: any) => {
+    // YT.PlayerState.PLAYING = 1, PAUSED = 2
     if (event.data === 1) setIsPlaying(true);
     else if (event.data === 2) setIsPlaying(false);
     else if (event.data === 0) {
+      // Loop
       event.target.seekTo(0);
       event.target.playVideo();
     }
@@ -67,7 +118,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
         rel: 0,
         modestbranding: 1,
         playsinline: 1,
-        mute: 1,
+        mute: 1, // Start muted to satisfy browser policies
         loop: 1,
         playlist: src,
         enablejsapi: 1,
@@ -82,6 +133,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
 
   useEffect(() => {
     if (type !== 'youtube') {
+      isReadyRef.current = true;
       setIsReady(true);
       return;
     }
@@ -106,28 +158,43 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
       if (playerRef.current?.destroy) {
         playerRef.current.destroy();
         playerRef.current = null;
+        isReadyRef.current = false;
       }
     };
   }, [type, initYT]);
 
-  const togglePlay = (e: React.MouseEvent) => {
+  // ============================================================================
+  // HANDLERS
+  // ============================================================================
+
+  const handleInteraction = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!isReady) return;
 
-    if (isPlaying) {
-      if (type === 'youtube') playerRef.current?.pauseVideo();
-      else playerRef.current?.pause();
-      setShowStatusIcon('pause');
+    if (activeVideoId === playerId) {
+      // If already active, toggle play/pause
+      if (isPlaying) {
+        if (type === 'youtube') playerRef.current?.pauseVideo();
+        else playerRef.current?.pause();
+        setShowStatusIcon('pause');
+      } else {
+        if (type === 'youtube') playerRef.current?.playVideo();
+        else playerRef.current?.play().catch(() => {});
+        setShowStatusIcon('play');
+      }
     } else {
-      if (type === 'youtube') playerRef.current?.playVideo();
-      else playerRef.current?.play().catch(() => {});
+      // Activate this player: Context update will trigger the useEffect play/unmute logic
+      setActiveVideoId(playerId);
       setShowStatusIcon('play');
     }
+    
     setTimeout(() => setShowStatusIcon(null), 800);
   };
 
   const toggleMute = (e: React.MouseEvent) => {
     e.stopPropagation();
+    if (!isReady) return;
+    
     const nextMute = !isMuted;
     setIsMuted(nextMute);
     
@@ -140,6 +207,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     } else if (playerRef.current) {
       (playerRef.current as HTMLVideoElement).muted = nextMute;
     }
+    
     setShowStatusIcon(nextMute ? 'mute' : 'unmute');
     setTimeout(() => setShowStatusIcon(null), 800);
   };
@@ -148,7 +216,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
     <div 
       ref={containerRef}
       className={`relative w-full h-full overflow-hidden bg-black group/vid ${className}`}
-      onClick={togglePlay}
+      onClick={handleInteraction}
     >
       {type === 'youtube' ? (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
@@ -185,7 +253,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
           {isMuted ? <VolumeX size={18} /> : <Volume2 size={18} />}
         </button>
         <button 
-          onClick={togglePlay}
+          onClick={handleInteraction}
           className="p-3 bg-black/40 backdrop-blur-xl rounded-full border border-white/10 text-white hover:bg-accent hover:text-background transition-all"
         >
           {isPlaying ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
@@ -200,7 +268,7 @@ const VideoPlayer: React.FC<VideoPlayerProps> = ({
             exit={{ scale: 1.2, opacity: 0 }}
             className="absolute inset-0 z-40 flex items-center justify-center pointer-events-none"
           >
-            <div className="bg-black/40 backdrop-blur-xl p-8 rounded-full border border-white/10 text-white">
+            <div className="bg-black/40 backdrop-blur-xl p-8 rounded-full border border-white/10 text-white shadow-2xl">
               {showStatusIcon === 'pause' && <Pause fill="currentColor" size={40} />}
               {showStatusIcon === 'mute' && <VolumeX size={40} />}
               {showStatusIcon === 'unmute' && <Volume2 size={40} />}

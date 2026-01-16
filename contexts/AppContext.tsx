@@ -7,6 +7,8 @@ interface AppContextType {
   stopReel: () => void;
   cursorVariant: string;
   setCursorVariant: (variant: string) => void;
+  activeVideoId: string | null;
+  setActiveVideoId: (id: string | null) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -14,6 +16,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [isReelPlaying, setIsReelPlaying] = useState(false);
   const [cursorVariant, setCursorVariant] = useState('default');
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
 
   const playReel = () => setIsReelPlaying(true);
   const stopReel = () => setIsReelPlaying(false);
@@ -25,7 +28,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         playReel, 
         stopReel, 
         cursorVariant, 
-        setCursorVariant
+        setCursorVariant,
+        activeVideoId,
+        setActiveVideoId
       }}
     >
       {children}
